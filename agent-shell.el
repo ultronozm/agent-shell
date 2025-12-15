@@ -1525,7 +1525,7 @@ Set NEW-SESSION to start a separate new session."
          (default-directory (agent-shell-cwd))
          (shell-buffer
           (shell-maker-start agent-shell--shell-maker-config
-                             no-focus
+                             t  ; Always use no-focus, handle display below
                              (when agent-shell-show-welcome-message
                                (map-elt config :welcome-function))
                              new-session
@@ -1563,6 +1563,9 @@ Set NEW-SESSION to start a separate new session."
         (agent-shell-completion-mode +1))
       (agent-shell--setup-modeline)
       (setq-local agent-shell--transcript-file (agent-shell--init-transcript config)))
+    ;; Display buffer if no-focus was nil, respecting agent-shell-display-action
+    (unless no-focus
+      (agent-shell--display-buffer shell-buffer))
     shell-buffer))
 
 (cl-defun agent-shell--delete-fragment (&key state block-id)
