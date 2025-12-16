@@ -1897,7 +1897,7 @@ BINDINGS is a list of alists defining key bindings to display, each with:
                   (icon-text-y text-height)
                   ;; Bindings positioned right after the bottom text (2 text lines) plus spacing
                   (bindings-y (+ (* 3 text-height) row-spacing))
-                  (svg (svg-create (frame-pixel-width) total-height))
+                   (svg (svg-create (agent-shell--safe-svg-width 1200) total-height))
                   (icon-filename
                    (if (map-nested-elt state '(:agent-config :icon-name))
                        (agent-shell--fetch-agent-icon (map-nested-elt state '(:agent-config :icon-name)))
@@ -2545,7 +2545,30 @@ Returns an alist with:
                   (cons :mime-type mime-type)
                   (cons :base64-p is-binary))
             (unless shallow
-              (list (cons :content content))))))
+               (list (cons :content content))))))
+
+(defun agent-shell--safe-svg-width (fallback-width)
+  "Calculate a safe width for SVG images that respects `max-image-size'.
+FALLBACK-WIDTH is used if frame-pixel-width is not available.
+Returns a width in pixels that won't exceed max-image-size limits."
+  (let* ((frame-width (if (display-graphic-p) (frame-pixel-width) fallback-width))
+         (max-size (bound-and-true-p max-image-size))
+         (safe-width frame-width))
+    (when max-size
+      (cond
+       ;; max-image-size is a number (megapixels)
+       ((numberp max-size)
+        (let* ((max-pixels (* max-size 1024 1024))  ; Convert MB to pixels
+               (max-width (floor max-pixels 100))) ; Assume height ~100px for headers
+          (setq safe-width (min frame-width max-width))))
+       ;; max-image-size is a cons (width . height)
+       ((consp max-size)
+        (let ((max-width (car max-size)))
+          (when max-width
+            (setq safe-width (min frame-width max-width))))))
+      ;; Ensure minimum reasonable width
+      (setq safe-width (max safe-width 400)))
+    safe-width))
 
 (cl-defun agent-shell--load-image (&key file-path (max-width 200))
   "Load image from FILE-PATH and return the image object.
