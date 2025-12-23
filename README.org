@@ -88,10 +88,10 @@ See https://github.com/QwenLM/qwen-code for details.
 For Mistral Vibe, install with:
 
 #+begin_src bash
-npm install -g @mistralai/vibe-acp
+uv tool install mistral-vibe
 #+end_src
 
-See https://github.com/mistralai/vibe-acp for details.
+See https://github.com/mistralai/mistral-vibe for details.
 
 ** Installation
 
@@ -296,10 +296,12 @@ For API key authentication:
 (setq agent-shell-mistral-authentication
       (agent-shell-mistral-make-authentication :api-key "your-mistral-api-key-here"))
 
-;; With function
+;; With function (reusing the API key configured in vibe)
 (setq agent-shell-mistral-authentication
       (agent-shell-mistral-make-authentication
-       :api-key (lambda () (auth-source-pass-get "secret" "mistral-api-key"))))
+       :api-key (lambda ()
+	          (string-trim
+		   (shell-command-to-string "source ~/.vibe/.env; echo $MISTRAL_API_KEY")))))
 #+end_src
 
 *** Customizing Available Agents

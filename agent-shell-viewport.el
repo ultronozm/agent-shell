@@ -658,7 +658,7 @@ For example, offer to kill associated shell session."
                                                         :existing-only t)
                                                        (current-buffer)))
                                               (agent-shell-buffers)))
-                   (_ (y-or-n-p "Kill shell session too?")))
+                   ((y-or-n-p "Kill shell session too?")))
           (mapc (lambda (shell-buffer)
                   (kill-buffer shell-buffer))
                 shell-buffers)))))
