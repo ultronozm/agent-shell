@@ -530,27 +530,25 @@
                         (mcpCapabilities (http . t) (sse . t)))))
     (should (equal (substring-no-properties
                     (agent-shell--format-agent-capabilities capabilities))
-                   (string-trim"
-prompt  image and embedded context
-mcp     http and sse"))))
+                   (concat
+                    "prompt  image and embedded context\n"
+                    "mcp     http and sse              "))))
 
   ;; Test with single capability per category (no comma)
   (let ((capabilities '((promptCapabilities (image . t))
                         (mcpCapabilities (http . t)))))
     (should (equal (substring-no-properties
                     (agent-shell--format-agent-capabilities capabilities))
-                   (string-trim "
-prompt  image
-mcp     http"))))
+                   (concat "prompt  image\n"
+                           "mcp     http "))))
 
   ;; Test with top-level boolean capability (loadSession)
   (let ((capabilities '((loadSession . t)
                         (promptCapabilities (image . t) (embeddedContext . t)))))
     (should (equal (substring-no-properties
                     (agent-shell--format-agent-capabilities capabilities))
-                   (string-trim "
-load session
-prompt        image and embedded context"))))
+                   (concat "load session                            \n"
+                           "prompt        image and embedded context"))))
 
   ;; Test with all capabilities disabled (should return empty string)
   (let ((capabilities '((promptCapabilities (image . :false) (audio . :false)))))
