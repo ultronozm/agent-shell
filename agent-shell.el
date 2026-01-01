@@ -2752,7 +2752,9 @@ Returns a buffer object or nil."
 
 If in a project, use project root."
   (expand-file-name
-   (or (when (fboundp 'projectile-project-root)
+   (or (when (and (boundp 'projectile-mode)
+                  projectile-mode
+                  (fboundp 'projectile-project-root))
          (projectile-project-root))
        (when (fboundp 'project-root)
          (when-let ((proj (project-current)))
