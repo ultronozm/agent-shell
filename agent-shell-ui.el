@@ -166,6 +166,10 @@ Return non-nil on success.  Falls back to rebuilding when body range is missing.
           (insert insert-text)
           (when body-props
             (add-text-properties insert-start (point) body-props))
+          ;; Extend the block range so callers (and subsequent searches) can
+          ;; "see" appended text as part of the same fragment.
+          (when state
+            (put-text-property insert-start (point) 'agent-shell-ui-state state))
           ;; If the new body ends with "\n\n", trim any whitespace before them.
           (when (>= (- (point) body-start) 2)
             (let ((end (point)))

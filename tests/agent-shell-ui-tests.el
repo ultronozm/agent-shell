@@ -270,6 +270,58 @@ rebuilds the fragment (matching the original O(n^2) behavior)."
         (goto-char (map-elt body :start))
         (should (search-forward "Hello" (map-elt body :end) t))))))
 
+(ert-deftest agent-shell-ui-fast-streaming-append-extends-block-range-test ()
+  "Fast append should extend `agent-shell-ui-state' (and thus block/body ranges)."
+  (with-temp-buffer
+    (let* ((agent-shell-ui-fast-streaming-append t)
+           (namespace-id "ns")
+           (block-id "b")
+           (label-left "L")
+           (label-right "R")
+           (calls 0)
+           (orig (symbol-function 'agent-shell-ui--append-fragment-body)))
+      (cl-letf (((symbol-function 'agent-shell-ui--append-fragment-body)
+                 (lambda (&rest args)
+                   (setq calls (1+ calls))
+                   (apply orig args))))
+        (agent-shell-ui-update-fragment
+         (agent-shell-ui-make-fragment-model
+          :namespace-id namespace-id
+          :block-id block-id
+          :label-left label-left
+          :label-right label-right
+          :body "Hello")
+         :append t :create-new t :expanded t :navigation 'never :no-undo t)
+        (let ((range
+               (agent-shell-ui-update-fragment
+                (agent-shell-ui-make-fragment-model
+                 :namespace-id namespace-id
+                 :block-id block-id
+                 :label-left label-left
+                 :label-right label-right
+                 :body " world")
+                :append t :create-new nil :expanded t :navigation 'never :no-undo t)))
+          (should (= calls 1))
+          ;; Confirm fast-append storage was used (rebuild path stores a string).
+          (let ((val (agent-shell-ui-tests--content-store-value)))
+            (should (consp val))
+            (should (eq (car val) 'chunks)))
+          ;; The returned ranges should include the newly appended text.
+          (let ((block-end (map-nested-elt range '(:block :end)))
+                (body-start (map-nested-elt range '(:body :start)))
+                (body-end (map-nested-elt range '(:body :end))))
+            (should (and body-start body-end))
+            (goto-char body-start)
+            (should (search-forward "world" body-end t))
+            (goto-char body-start)
+            (should (search-forward "world" block-end t))
+            ;; The appended text should also be part of the block's state range.
+            (let ((pos (save-excursion
+                         (goto-char body-start)
+                         (search-forward "world" body-end t)
+                         (match-beginning 0))))
+              (should (get-text-property pos 'agent-shell-ui-state)))))))))
+
 (ert-deftest agent-shell-ui-append-respects-collapsed-invisibility-test ()
   "Appended text should remain invisible when the fragment is collapsed."
   (with-temp-buffer

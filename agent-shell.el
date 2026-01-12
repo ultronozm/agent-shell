@@ -393,7 +393,7 @@ HEARTBEAT, and AUTHENTICATE-REQUEST-MAKER."
         (cons :pending-requests nil)))
 
 (defvar-local agent-shell--state
-    (agent-shell--make-state))
+  (agent-shell--make-state))
 
 (defvar-local agent-shell--transcript-file nil
   "Path to the shell's transcript file.")
@@ -1712,11 +1712,7 @@ by default."
                             :append append
                             :create-new create-new
                             :expanded expanded
-                            :no-undo t))
-                    (padding-start (map-nested-elt range '(:padding :start)))
-                    (padding-end (map-nested-elt range '(:padding :end)))
-                    (block-start (map-nested-elt range '(:block :start)))
-                    (block-end (map-nested-elt range '(:block :end))))
+                            :no-undo t)))
           ;; Apply markdown overlay to body.
           (save-restriction
             (when-let ((body-start (map-nested-elt range '(:body :start)))
@@ -1754,38 +1750,40 @@ by default."
                          :create-new create-new
                          :expanded expanded
                          :no-undo t))
-                 (padding-start (map-nested-elt range '(:padding :start)))
-                 (padding-end (map-nested-elt range '(:padding :end)))
                  (block-start (map-nested-elt range '(:block :start)))
                  (block-end (map-nested-elt range '(:block :end))))
-       (save-restriction
-         ;; TODO: Move this to shell-maker?
-         (let ((inhibit-read-only t))
-           ;; comint relies on field property to
-           ;; derive `comint-next-prompt'.
-           ;; Marking as field to avoid false positives in
-           ;; `agent-shell-next-item' and `agent-shell-previous-item'.
-           (add-text-properties (or padding-start block-start)
-                                (or padding-end block-end) '(field output)))
-         ;; Apply markdown overlay to body.
-         (when-let ((body-start (map-nested-elt range '(:body :start)))
-                    (body-end (map-nested-elt range '(:body :end))))
-           (narrow-to-region body-start body-end)
-           (let ((markdown-overlays-highlight-blocks agent-shell-highlight-blocks))
-             (markdown-overlays-put))
-           (widen))
-         ;;
-         ;; Note: For now, we're skipping applying markdown overlays
-         ;; on left labels as they currently carry propertized text
-         ;; for statuses (ie. boxed).
-         ;;
-         ;; Apply markdown overlay to right label.
-         (when-let ((label-right-start (map-nested-elt range '(:label-right :start)))
-                    (label-right-end (map-nested-elt range '(:label-right :end))))
-           (narrow-to-region label-right-start label-right-end)
-           (let ((markdown-overlays-highlight-blocks agent-shell-highlight-blocks))
-             (markdown-overlays-put))
-           (widen)))
+       ;; Note: `:padding` is optional. The fast streaming append path doesn't
+       ;; generate padding, but we still want markdown overlays applied.
+       (let ((padding-start (map-nested-elt range '(:padding :start)))
+             (padding-end (map-nested-elt range '(:padding :end))))
+         (save-restriction
+           ;; TODO: Move this to shell-maker?
+           (let ((inhibit-read-only t))
+             ;; comint relies on field property to
+             ;; derive `comint-next-prompt'.
+             ;; Marking as field to avoid false positives in
+             ;; `agent-shell-next-item' and `agent-shell-previous-item'.
+             (add-text-properties (or padding-start block-start)
+                                  (or padding-end block-end) '(field output)))
+           ;; Apply markdown overlay to body.
+           (when-let ((body-start (map-nested-elt range '(:body :start)))
+                      (body-end (map-nested-elt range '(:body :end))))
+             (narrow-to-region body-start body-end)
+             (let ((markdown-overlays-highlight-blocks agent-shell-highlight-blocks))
+               (markdown-overlays-put))
+             (widen))
+           ;;
+           ;; Note: For now, we're skipping applying markdown overlays
+           ;; on left labels as they currently carry propertized text
+           ;; for statuses (ie. boxed).
+           ;;
+           ;; Apply markdown overlay to right label.
+           (when-let ((label-right-start (map-nested-elt range '(:label-right :start)))
+                      (label-right-end (map-nested-elt range '(:label-right :end))))
+             (narrow-to-region label-right-start label-right-end)
+             (let ((markdown-overlays-highlight-blocks agent-shell-highlight-blocks))
+               (markdown-overlays-put))
+             (widen))))
        (run-hook-with-args 'agent-shell-section-functions range)))))
 
 (defun agent-shell-toggle-logging ()
