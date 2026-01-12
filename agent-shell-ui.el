@@ -41,6 +41,174 @@
   "A hash table used to save sui content like body.
 This avoids duplicating body content in text properties which is more costly.")
 
+(defcustom agent-shell-ui-fast-streaming-append t
+  "When non-nil, append streamed body chunks in-place when possible.
+
+This is an optimization for streaming updates.  When nil, fall back to the
+original behavior of rebuilding the entire fragment on each update."
+  :type 'boolean
+  :group 'agent-shell)
+
+(defconst agent-shell-ui--body-indent "  "
+  "Indentation prefix applied to fragment body lines.")
+
+(defun agent-shell-ui--content-store-key (qualified-id)
+  "Return content-store key for QUALIFIED-ID."
+  (concat qualified-id "-body"))
+
+(defun agent-shell-ui--ensure-content-store ()
+  "Ensure `agent-shell-ui--content-store' is initialized."
+  (unless agent-shell-ui--content-store
+    (setq agent-shell-ui--content-store (make-hash-table :test 'equal))))
+
+(defun agent-shell-ui--normalize-body (body)
+  "Normalize BODY to match fragment rendering rules.
+
+If BODY ends with two or more newlines, trim all trailing whitespace and keep
+exactly two newlines."
+  (cond
+   ((null body) nil)
+   ((not (stringp body)) body)
+   ((string-suffix-p "\n\n" body)
+    (concat (string-trim-right body) "\n\n"))
+   (t body)))
+
+(defun agent-shell-ui--content-store-get-body (qualified-id)
+  "Return stored body string for QUALIFIED-ID.
+
+If the stored value is chunked, materialize it and cache as a string."
+  (when agent-shell-ui--content-store
+    (let* ((key (agent-shell-ui--content-store-key qualified-id))
+           (val (gethash key agent-shell-ui--content-store)))
+      (cond
+       ((null val) nil)
+       ((stringp val) val)
+       ((and (consp val) (eq (car val) 'chunks))
+        ;; Chunks are stored in reverse order (latest-first) for O(1) append.
+        (let ((body (apply #'concat (reverse (cdr val)))))
+          (puthash key body agent-shell-ui--content-store)
+          body))
+       (t val)))))
+
+(defun agent-shell-ui--chunk-insert-text (chunk at-line-start)
+  "Return display text for CHUNK to append to an indented body.
+
+When AT-LINE-START is non-nil, indent the first line; otherwise only indent
+subsequent lines (after newlines)."
+  (let ((chunk (or chunk "")))
+    (if at-line-start
+        (agent-shell-ui--indent-text chunk agent-shell-ui--body-indent)
+      (let* ((lines (split-string chunk "\n" nil))
+             (first (car lines))
+             (rest (cdr lines)))
+        (mapconcat #'identity
+                   (cons first
+                         (mapcar (lambda (line)
+                                   (if (string-empty-p line)
+                                       line
+                                     (concat agent-shell-ui--body-indent line)))
+                                 rest))
+                   "\n")))))
+
+(defun agent-shell-ui--content-store-append-chunk (qualified-id chunk)
+  "Append CHUNK to QUALIFIED-ID's stored body, using chunked storage."
+  (agent-shell-ui--ensure-content-store)
+  (let* ((key (agent-shell-ui--content-store-key qualified-id))
+         (chunk (agent-shell-ui--normalize-body chunk))
+         (val (gethash key agent-shell-ui--content-store))
+         ;; Store chunks in reverse order so we can `cons' for O(1) append.
+         (chunks-rev
+          (cond
+           ((null val) (list chunk))
+           ((stringp val) (list chunk val))
+           ((and (consp val) (eq (car val) 'chunks)) (cons chunk (cdr val)))
+           (t (list chunk (format "%s" val))))))
+    ;; Apply the same end-of-body normalization as a rebuild would.
+    (let* ((last (car chunks-rev))
+           (prev (cadr chunks-rev))
+           (suffix (concat (when prev (substring prev (max 0 (- (length prev) 2))))
+                           (when last (substring last (max 0 (- (length last) 2)))))))
+      (when (string-suffix-p "\n\n" suffix)
+        ;; Trim all trailing whitespace across chunks and then ensure "\n\n".
+        (while (and chunks-rev
+                    (string-empty-p (string-trim-right (car chunks-rev))))
+          (setcar chunks-rev (string-trim-right (car chunks-rev)))
+          (when (string-empty-p (car chunks-rev))
+            (setq chunks-rev (cdr chunks-rev))))
+        (if chunks-rev
+            (setcar chunks-rev
+                    (concat (string-trim-right (car chunks-rev)) "\n\n"))
+          (setq chunks-rev (list "\n\n")))))
+    (puthash key (cons 'chunks chunks-rev) agent-shell-ui--content-store)))
+
+(cl-defun agent-shell-ui--append-fragment-body (&key qualified-id chunk state)
+  "Append CHUNK to the existing fragment QUALIFIED-ID, updating buffer in place.
+
+Return non-nil on success.  Falls back to rebuilding when body range is missing."
+  (let* ((block (agent-shell-ui--block-range :position (point)))
+         (body (and block
+                    (agent-shell-ui--nearest-range-matching-property
+                     :property 'agent-shell-ui-section :value 'body
+                     :from (map-elt block :start)
+                     :to (map-elt block :end)))))
+    (when (and block body (stringp chunk))
+      (let* ((body-start (map-elt body :start))
+             (body-end (map-elt body :end))
+             (insert-at-line-start (or (= body-start body-end)
+                                       (eq (char-before body-end) ?\n)))
+             (chunk (agent-shell-ui--normalize-body chunk))
+             (insert-text (agent-shell-ui--chunk-insert-text chunk insert-at-line-start))
+             (collapsed (and state (map-elt state :collapsed)))
+             (body-props (and (< body-start body-end)
+                              (text-properties-at body-start))))
+        (goto-char body-end)
+        (let ((insert-start (point)))
+          (insert insert-text)
+          (when body-props
+            (add-text-properties insert-start (point) body-props))
+          ;; If the new body ends with "\n\n", trim any whitespace before them.
+          (when (>= (- (point) body-start) 2)
+            (let ((end (point)))
+              (when (string= (buffer-substring-no-properties (- end 2) end) "\n\n")
+                (let ((trim-end (- end 2))
+                      (pos (- end 2)))
+                  (while (and (> pos body-start)
+                              (memq (char-before pos) '(?\s ?\t ?\n)))
+                    (setq pos (1- pos)))
+                  (delete-region pos trim-end)))))
+          ;; Update stored body (chunked) to avoid O(n²) concatenation.
+          (agent-shell-ui--content-store-append-chunk qualified-id chunk)
+          ;; Recompute body range and (re)apply invisibility rules.
+          (let* ((block (agent-shell-ui--block-range :position body-start))
+                 (body (agent-shell-ui--nearest-range-matching-property
+                        :property 'agent-shell-ui-section :value 'body
+                        :from (map-elt block :start)
+                        :to (map-elt block :end)))
+                 (new-body-start (map-elt body :start))
+                 (new-body-end (map-elt body :end))
+                 (label-right (agent-shell-ui--nearest-range-matching-property
+                               :property 'agent-shell-ui-section :value 'label-right
+                               :from (map-elt block :start)
+                               :to (map-elt block :end)))
+                 (label-left (agent-shell-ui--nearest-range-matching-property
+                              :property 'agent-shell-ui-section :value 'label-left
+                              :from (map-elt block :start)
+                              :to (map-elt block :end)))
+                 (invisible-start (or (map-elt label-right :end)
+                                      (map-elt label-left :end))))
+            (unless collapsed
+              ;; Make all body text visible first; then hide only trailing whitespace.
+              (remove-text-properties new-body-start new-body-end '(invisible nil))
+              (save-excursion
+                (goto-char new-body-end)
+                (when (re-search-backward "[^ \t\n]" new-body-start t)
+                  (forward-char 1)
+                  (when (< (point) new-body-end)
+                    (add-text-properties (point) new-body-end '(invisible t))))))
+            (when (and collapsed invisible-start)
+              (put-text-property invisible-start new-body-end 'invisible t)))
+          t)))))
+
 (cl-defun agent-shell-ui-make-fragment-model (&key (namespace-id "global") (block-id "1") label-left label-right body)
   "Create a fragment model alist.
 NAMESPACE-ID, BLOCK-ID, LABEL-LEFT, LABEL-RIGHT, and BODY are the keys."
@@ -85,38 +253,60 @@ For existing blocks, the current expansion state is preserved unless overridden.
         (when match
           (goto-char (prop-match-beginning match)))
         (if (and match (not create-new))
-            ;; Found existing block - delete and regenerate
-            (let* ((existing-model (agent-shell-ui--read-fragment-at-point))
-                   (state (get-text-property (point) 'agent-shell-ui-state))
-                   (existing-body (map-elt existing-model :body))
-                   (block-end (prop-match-end match))
-                   (final-body (if new-body
-                                   (if (and append existing-body)
-                                       (concat existing-body new-body)
-                                     new-body)
-                                 existing-body))
-                   (final-model (list (cons :namespace-id namespace-id)
-                                      (cons :block-id (map-elt model :block-id))
-                                      (cons :label-left (or new-label-left
-                                                            (map-elt existing-model :label-left)))
-                                      (cons :label-right (or new-label-right
-                                                             (map-elt existing-model :label-right)))
-                                      (cons :body final-body))))
+            ;; Found existing block.
+            (let* ((state (get-text-property (point) 'agent-shell-ui-state))
+                   (block-range (agent-shell-ui--block-range :position (point)))
+                   (existing-label-left (when-let ((r (agent-shell-ui--nearest-range-matching-property
+                                                       :property 'agent-shell-ui-section :value 'label-left
+                                                       :from (map-elt block-range :start)
+                                                       :to (map-elt block-range :end))))
+                                          (buffer-substring-no-properties (map-elt r :start)
+                                                                          (map-elt r :end))))
+                   (existing-label-right (when-let ((r (agent-shell-ui--nearest-range-matching-property
+                                                        :property 'agent-shell-ui-section :value 'label-right
+                                                        :from (map-elt block-range :start)
+                                                        :to (map-elt block-range :end))))
+                                           (buffer-substring-no-properties (map-elt r :start)
+                                                                           (map-elt r :end))))
+                   (labels-unchanged-p
+                    (and (or (null new-label-left)
+                             (and existing-label-left
+                                  (string= (substring-no-properties new-label-left) existing-label-left)))
+                         (or (null new-label-right)
+                             (and existing-label-right
+                                  (string= (substring-no-properties new-label-right) existing-label-right))))))
               (setq block-start (prop-match-beginning match))
-
-              ;; Safely replace existing block using narrow-to-region
-              (save-excursion
-                (goto-char block-start)
-                (skip-chars-backward "\n")
-                (setq padding-start (point)))
-
-              ;; Replace block
-              (delete-region block-start block-end)
-              (goto-char block-start)
-              (agent-shell-ui--insert-fragment final-model qualified-id
-                                               (not (map-elt state :collapsed))
-                                               navigation)
-              (setq padding-end (point)))
+              (unless (and agent-shell-ui-fast-streaming-append
+                           append new-body labels-unchanged-p
+                           (agent-shell-ui--append-fragment-body
+                            :qualified-id qualified-id
+                            :chunk new-body
+                            :state state))
+                ;; Fall back to delete and regenerate.
+                (let* ((existing-body (agent-shell-ui--content-store-get-body qualified-id))
+                       (block-end (prop-match-end match))
+                       (final-body (if new-body
+                                       (if (and append existing-body)
+                                           (concat existing-body new-body)
+                                         new-body)
+                                     existing-body))
+                       (final-model (list (cons :namespace-id namespace-id)
+                                          (cons :block-id (map-elt model :block-id))
+                                          (cons :label-left (or new-label-left existing-label-left))
+                                          (cons :label-right (or new-label-right existing-label-right))
+                                          (cons :body final-body))))
+                  ;; Safely replace existing block using narrow-to-region
+                  (save-excursion
+                    (goto-char block-start)
+                    (skip-chars-backward "\n")
+                    (setq padding-start (point)))
+                  ;; Replace block
+                  (delete-region block-start block-end)
+                  (goto-char block-start)
+                  (agent-shell-ui--insert-fragment final-model qualified-id
+                                                   (not (map-elt state :collapsed))
+                                                   navigation)
+                  (setq padding-end (point)))))
 
           ;; Not found or create-new - insert new block
           (goto-char (point-max))
@@ -171,9 +361,9 @@ For existing blocks, the current expansion state is preserved unless overridden.
                                  :property 'agent-shell-ui-section :value 'label-right)))
           (setf (map-elt fragment :label-right) (buffer-substring (map-elt label-right :start)
                                                                   (map-elt label-right :end))))
-        (when agent-shell-ui--content-store
-          (when-let ((body (gethash (concat qualified-id "-body") agent-shell-ui--content-store)))
-            (setf (map-elt fragment :body) body)))))
+	       (when agent-shell-ui--content-store
+	         (when-let ((body (agent-shell-ui--content-store-get-body qualified-id)))
+	           (setf (map-elt fragment :body) body)))))
     fragment))
 
 (cl-defun agent-shell-ui-delete-fragment (&key namespace-id block-id no-undo)
@@ -191,15 +381,16 @@ When NO-UNDO is non-nil, disable undo recording for this operation."
                      (lambda (_ state)
                        (equal (map-elt state :qualified-id) qualified-id))
                      t))))
-      (when match
-        (let ((block-start (prop-match-beginning match))
-              (block-end (prop-match-end match)))
-          (when agent-shell-ui--content-store
-            (remhash qualified-id agent-shell-ui--content-store))
-          ;; Remove vertical space that's part of the block.
-          (goto-char block-end)
-          (skip-chars-forward " \t\n")
-          (setq block-end (point))
+	     (when match
+	       (let ((block-start (prop-match-beginning match))
+		            (block-end (prop-match-end match)))
+	         (when agent-shell-ui--content-store
+		          (remhash (agent-shell-ui--content-store-key qualified-id)
+		                   agent-shell-ui--content-store))
+	         ;; Remove vertical space that's part of the block.
+	         (goto-char block-end)
+	         (skip-chars-forward " \t\n")
+	         (setq block-end (point))
           (delete-region block-start block-end))))))
 
 (defun agent-shell-ui--read-fragment-at-point ()
