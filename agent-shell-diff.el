@@ -40,7 +40,7 @@ This variable is automatically set by :on-exit from `agent-shell-diff'
 and can be temporarily let-bound to nil to prevent the
 on-exit callback from running when the buffer is killed.")
 
-(cl-defun agent-shell-diff (&key old new on-exit title bindings)
+(cl-defun agent-shell-diff (&key old new on-exit title bindings file)
   "Display a diff between OLD and NEW strings in a buffer.
 
 Creates a new buffer showing the differences between OLD and NEW
@@ -65,12 +65,18 @@ Arguments:
     (unwind-protect
         (progn
           (with-current-buffer diff-buffer
-            (let ((inhibit-read-only t))
+            (let ((inhibit-read-only t)
+                  (diff-mode-read-only nil))
               (erase-buffer)
-              (insert "\n")
-              (insert (agent-shell-diff--make-diff old new))
+              (agent-shell-diff--insert-diff old new file diff-buffer)
               ;; Add overlays to hide scary text.
               (save-excursion
+                (goto-char (point-min))
+                ;; Remove command added by diff-no-select
+                (delete-region (point) (progn (forward-line 1) (point)))
+                ;; Remove "Diff finished." added by diff-no-select
+                (delete-region (progn (goto-char (point-max)) (forward-line -1) (forward-line 0) (point))
+                               (point-max))
                 (goto-char (point-min))
                 ;; Hide --- and +++ lines
                 (while (re-search-forward "^\\(---\\|\\+\\+\\+\\).*\n" nil t)
@@ -95,7 +101,6 @@ Arguments:
                     (overlay-put overlay 'display
                                  (propertize "│ changes │\n╰─────────╯\n\n" 'face face))
                     (overlay-put overlay 'evaporate t)))))
-            (diff-mode)
             (when bindings
               (setq header-line-format
                     (concat
@@ -146,16 +151,15 @@ Arguments:
       (pop-to-buffer diff-buffer '((display-buffer-use-some-window
                                     display-buffer-same-window))))))
 
-(defun agent-shell-diff--make-diff (old new)
+(defun agent-shell-diff--insert-diff (old new file buf)
   "Create a unified diff between OLD and NEW strings.
 Returns the diff output as a string."
-  (let ((old-file (make-temp-file "old"))
-        (new-file (make-temp-file "new")))
+  (let* ((suffix (format ".%s" (file-name-extension file)))
+         (old-file (make-temp-file "old" nil suffix))
+         (new-file (make-temp-file "new" nil suffix)))
     (with-temp-file old-file (insert old))
     (with-temp-file new-file (insert new))
-    (with-temp-buffer
-      (call-process "diff" nil t nil "-U3" old-file new-file)
-      (buffer-string))))
+    (diff-no-select old-file new-file "-U3" t buf)))
 
 (provide 'agent-shell-diff)
 
