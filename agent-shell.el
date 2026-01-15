@@ -102,6 +102,14 @@ When non-nil, tool use sections are expanded."
   :type 'boolean
   :group 'agent-shell)
 
+(defcustom agent-shell-user-message-expand-by-default nil
+  "Whether user message sections should be expanded by default.
+
+When nil (the default), user message sections are collapsed.
+When non-nil, user message sections are expanded."
+  :type 'boolean
+  :group 'agent-shell)
+
 (defcustom agent-shell-show-config-icons t
   "Whether to show icons in agent config selection."
   :type 'boolean
@@ -805,6 +813,28 @@ Flow:
                   :append t
                   :navigation 'never))
                (map-put! state :last-entry-type "agent_message_chunk"))
+              ((equal (map-elt update 'sessionUpdate) "user_message_chunk")
+               (unless (equal (map-elt state :last-entry-type) "user_message_chunk")
+                 (map-put! state :chunked-group-count (1+ (map-elt state :chunked-group-count)))
+                 (agent-shell--append-transcript
+                  :text (format "## User (%s)\n\n" (format-time-string "%F %T"))
+                  :file-path agent-shell--transcript-file))
+               (let-alist update
+                 (agent-shell--append-transcript
+                  :text (format "> %s\n" .content.text)
+                  :file-path agent-shell--transcript-file)
+                 (agent-shell--update-fragment
+                  :state state
+                  :block-id (format "%s-user_message_chunk"
+                                    (map-elt state :chunked-group-count))
+                  :label-left (propertize "User" 'font-lock-face 'font-lock-doc-markup-face)
+                  :body .content.text
+                  :create-new (not (equal (map-elt state :last-entry-type)
+                                          "user_message_chunk"))
+                  :append t
+                  :expanded agent-shell-user-message-expand-by-default
+                  :navigation 'never))
+               (map-put! state :last-entry-type "user_message_chunk"))
               ((equal (map-elt update 'sessionUpdate) "plan")
                (let-alist update
                  (agent-shell--update-fragment
