@@ -755,5 +755,61 @@ code block content with spaces
                    [((name . "simple")
                      (command . "simple-server"))]))))
 
+(ert-deftest agent-shell--completion-bounds-test ()
+  "Test `agent-shell--completion-bounds' function."
+  (let ((path-chars "[:alnum:]/_.-"))
+
+    ;; Test finding bounds after @ trigger
+    (with-temp-buffer
+      (insert "@file.txt")
+      (goto-char (point-min))
+      (forward-char 1)
+      (let ((bounds (agent-shell--completion-bounds path-chars ?@)))
+        (should bounds)
+        (should (equal (car bounds) 2))  ; start after @
+        (should (equal (cdr bounds) 10)))) ; end of file.txt
+
+    ;; Test with cursor in middle of word
+    (with-temp-buffer
+      (insert "@some/path/file.el")
+      (goto-char 8)
+      (let ((bounds (agent-shell--completion-bounds path-chars ?@)))
+        (should bounds)
+        (should (equal (car bounds) 2))
+        (should (equal (cdr bounds) 19))))
+
+    ;; Test returns nil when trigger character is missing
+    (with-temp-buffer
+      (insert "file.txt")
+      (goto-char (point-min))
+      (let ((bounds (agent-shell--completion-bounds path-chars ?@)))
+        (should-not bounds)))
+
+    ;; Test with empty word after trigger
+    (with-temp-buffer
+      (insert "@ ")
+      (goto-char 2) ; Right after @
+      (let ((bounds (agent-shell--completion-bounds path-chars ?@)))
+        (should bounds)
+        (should (equal (car bounds) 2))
+        (should (equal (cdr bounds) 2)))) ; Empty range
+
+    ;; Test with text before trigger
+    (with-temp-buffer
+      (insert "Look at @README.md please")
+      (goto-char 12) ; In middle of README
+      (let ((bounds (agent-shell--completion-bounds path-chars ?@)))
+        (should bounds)
+        (should (equal (car bounds) 10))
+        (should (equal (cdr bounds) 19))))))
+
+(ert-deftest agent-shell--capf-exit-with-space-test ()
+  "Test `agent-shell--capf-exit-with-space' function."
+  (with-temp-buffer
+    (insert "test")
+    (agent-shell--capf-exit-with-space "ignored" 'finished)
+    (should (equal (buffer-string) "test "))
+    (should (equal (point) 6))))
+
 (provide 'agent-shell-tests)
 ;;; agent-shell-tests.el ends here

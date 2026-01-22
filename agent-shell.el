@@ -3107,49 +3107,54 @@ The captured screenshot file path is then inserted into the shell prompt."
               (project-files proj))))
    (t nil)))
 
+(defun agent-shell--completion-bounds (char-class trigger-char)
+  "Find completion bounds for CHAR-CLASS, if TRIGGER-CHAR precedes them.
+Returns (start . end) if TRIGGER-CHAR is found before the word, nil otherwise."
+  (save-excursion
+    (let ((end (progn (skip-chars-forward char-class) (point)))
+          (start (progn (skip-chars-backward char-class) (point))))
+      (when (eq (char-before start) trigger-char)
+        (cons start end)))))
+
+(defun agent-shell--capf-exit-with-space (_string _status)
+  "Insert space after completion."
+  (insert " "))
+
 (defun agent-shell--file-completion-at-point ()
   "Complete project files after @."
-  (when-let* ((triggered (eq (char-before) ?@))
-              (start (point))
-              (end (save-excursion
-                     (skip-chars-forward "[:alnum:]/_.-")
-                     (point)))
-              (prefix (buffer-substring start end))
+  (when-let* ((bounds (agent-shell--completion-bounds "[:alnum:]/_.-" ?@))
               (files (agent-shell--project-files)))
-    (list start end
-          (seq-filter
-           (lambda (f) (string-prefix-p prefix (file-name-nondirectory f)))
-           files)
+    (list (car bounds) (cdr bounds)
+          files
           :exclusive 'no
-          :exit-function
-          (lambda (_status _string)
-            (insert " ")))))
+          :company-kind (lambda (f) (if (string-suffix-p "/" f) 'folder 'file))
+          :exit-function #'agent-shell--capf-exit-with-space)))
 
 (defun agent-shell--command-completion-at-point ()
   "Complete available commands after /."
-  (when (eq (char-before) ?/)
-    (let* ((start (point))
-           (end (save-excursion
-                  (skip-chars-forward "[:alnum:]_-")
-                  (point)))
-           (prefix (buffer-substring start end))
-           (commands (map-elt agent-shell--state :available-commands)))
-      (list start end
-            (mapcar (lambda (command)
-                      (map-elt command 'name))
-                    (seq-filter
-                     (lambda (command)
-                       (string-prefix-p prefix (map-elt command 'name)))
-                     commands))
-            :exclusive t ; prevent / file completion fallback (already covered by @).
-            :exit-function
-            (lambda (_status _string)
-              (insert " "))))))
+  (when-let* ((bounds (agent-shell--completion-bounds "[:alnum:]_-" ?/))
+              (commands (map-elt agent-shell--state :available-commands))
+              (descriptions (mapcar (lambda (c)
+                                      (cons (map-elt c 'name)
+                                            (map-elt c 'description)))
+                                    commands)))
+    (list (car bounds) (cdr bounds)
+          (mapcar #'car descriptions)
+          :exclusive t
+          :annotation-function
+          (lambda (name)
+            (when-let* ((desc (map-elt descriptions name)))
+              (concat "  " desc)))
+          :company-kind (lambda (_) 'function)
+          :exit-function #'agent-shell--capf-exit-with-space)))
 
 (defun agent-shell--trigger-completion-at-point ()
-  "Trigger completion when @ or / is typed."
-  (when (or (eq (char-before) ?@)
-            (eq (char-before) ?/))
+  "Trigger completion when @ or / is typed at a word boundary.
+Only triggers when the character is at line start or after whitespace,
+preventing spurious completions mid-word or in paths."
+  (when (and (memq (char-before) '(?@ ?/))
+             (or (= (point) (1+ (line-beginning-position)))
+                 (memq (char-before (1- (point))) '(?\s ?\t ?\n))))
     (completion-at-point)))
 
 (define-minor-mode agent-shell-completion-mode
