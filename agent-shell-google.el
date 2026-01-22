@@ -34,6 +34,7 @@
 (declare-function agent-shell--interpolate-gradient "agent-shell")
 (declare-function agent-shell--make-acp-client "agent-shell")
 (declare-function agent-shell-make-agent-config "agent-shell")
+(autoload 'agent-shell-make-agent-config "agent-shell")
 (declare-function agent-shell--dwim "agent-shell")
 
 (cl-defun agent-shell-google-make-authentication (&key api-key login vertex-ai none)
