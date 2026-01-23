@@ -183,7 +183,7 @@ Each element can be:
 Sources are checked in order until one returns non-nil."
   :type '(repeat (choice (const :tag "Buffer files" files)
                          (const :tag "Selected region" region)
-                         (const :tag "Flymake error at point" error)
+                         (const :tag "Error at point" error)
                          (const :tag "Current line" line)
                          (function :tag "Custom function")))
   :group 'agent-shell)
@@ -3630,6 +3630,50 @@ If CAP is non-nil, truncate at CAP."
               (setq final-lines (append (seq-take final-lines cap) '("   ..."))))
             (string-join final-lines "\n")))))))
 
+(cl-defun agent-shell--format-diagnostic (&key buffer beg end line col type text)
+  "Format a diagnostic error with context.
+BUFFER is the buffer containing the error.
+BEG and END are the error region positions.
+LINE and COL are the line and column numbers.
+TYPE is the error type/level.
+TEXT is the error message."
+  (let* ((file (agent-shell--shorten-paths (buffer-file-name buffer) t))
+         (code (when (and beg end)
+                 (with-current-buffer buffer
+                   (buffer-substring beg end))))
+         (context-lines 3)
+         (context (when beg
+                    (with-current-buffer buffer
+                      (save-excursion
+                        (goto-char beg)
+                        (let* ((start-line (max 1 (- line context-lines)))
+                               (context-beg (progn
+                                              (goto-char (point-min))
+                                              (forward-line (1- start-line))
+                                              (point)))
+                               (context-end (progn
+                                              (forward-line (+ context-lines context-lines 1))
+                                              (point)))
+                               (numbered-region (agent-shell--get-numbered-region
+                                                 :buffer buffer
+                                                 :from context-beg
+                                                 :to context-end))
+                               ;; Replace the line number prefix for the error line
+                               (error-line-prefix (format "   %d:" line))
+                               (highlight-prefix (format "-> %d:" line)))
+                          (replace-regexp-in-string
+                           (regexp-quote error-line-prefix)
+                           highlight-prefix
+                           numbered-region
+                           nil 'literal)))))))
+    (if (or (not code) (string-empty-p (string-trim code)))
+        (format "%s:%d:%d: %s: %s"
+                (or file (buffer-name buffer))
+                line (or col 0) type text)
+      (format "%s:%d:%d: %s: %s\n\n%s"
+              (or file (buffer-name buffer))
+              line (or col 0) type text context))))
+
 (defun agent-shell--get-flymake-error-context ()
   "Get flymake error at point, ready for sending to agent."
   (when-let ((diagnostics (flymake-diagnostics (point))))
@@ -3640,48 +3684,62 @@ If CAP is non-nil, truncate at CAP."
               (end (flymake-diagnostic-end diagnostic))
               (type (flymake-diagnostic-type diagnostic))
               (text (flymake-diagnostic-text diagnostic))
-              (file (agent-shell--shorten-paths (buffer-file-name buffer) t))
               (line (with-current-buffer buffer
                       (line-number-at-pos beg)))
               (col (with-current-buffer buffer
                      (save-excursion
                        (goto-char beg)
-                       (current-column))))
-              (code (with-current-buffer buffer
-                      (buffer-substring beg end)))
-              (context-lines 3)
-              (context (with-current-buffer buffer
-                         (save-excursion
-                           (goto-char beg)
-                           (let* ((start-line (max 1 (- line context-lines)))
-                                  (context-beg (progn
-                                                 (goto-char (point-min))
-                                                 (forward-line (1- start-line))
-                                                 (point)))
-                                  (context-end (progn
-                                                 (forward-line (+ context-lines context-lines 1))
-                                                 (point)))
-                                  (numbered-region (agent-shell--get-numbered-region
-                                                    :buffer buffer
-                                                    :from context-beg
-                                                    :to context-end))
-                                  ;; Replace the line number prefix for the error line
-                                  (error-line-prefix (format "   %d:" line))
-                                  (highlight-prefix (format "-> %d:" line)))
-                             (replace-regexp-in-string
-                              (regexp-quote error-line-prefix)
-                              highlight-prefix
-                              numbered-region
-                              nil 'literal))))))
-         (if (string-empty-p (string-trim code))
-             (format "%s:%d:%d: %s: %s"
-                     (or file (buffer-name buffer))
-                     line col type text)
-           (format "%s:%d:%d: %s: %s\n\n%s"
-                   (or file (buffer-name buffer))
-                   line col type text context))))
+                       (current-column)))))
+         (agent-shell--format-diagnostic
+          :buffer buffer
+          :beg beg
+          :end end
+          :line line
+          :col col
+          :type type
+          :text text)))
      diagnostics
      "\n\n")))
+
+(defun agent-shell--get-flycheck-error-context ()
+  "Get flycheck error at point, ready for sending to agent."
+  (when (and (bound-and-true-p flycheck-mode)
+             (fboundp 'flycheck-overlay-errors-at))
+    (when-let ((errors (flycheck-overlay-errors-at (point))))
+      (mapconcat
+       (lambda (err)
+         (let* ((buffer (current-buffer))
+                (beg (flycheck-error-pos err))
+                (end (when beg
+                       (save-excursion
+                         (goto-char beg)
+                         (if-let ((end-line (flycheck-error-end-line err))
+                                  (end-col (flycheck-error-end-column err)))
+                             (progn
+                               (forward-line (- end-line (line-number-at-pos)))
+                               (move-to-column end-col)
+                               (point))
+                           beg))))
+                (type (flycheck-error-level err))
+                (text (flycheck-error-message err))
+                (line (flycheck-error-line err))
+                (col (flycheck-error-column err)))
+           (agent-shell--format-diagnostic
+            :buffer buffer
+            :beg beg
+            :end end
+            :line line
+            :col col
+            :type type
+            :text text)))
+       errors
+       "\n\n"))))
+
+(defun agent-shell--get-error-context ()
+  "Get error at point from either flymake or flycheck, whichever is available.
+Tries flymake first, then flycheck."
+  (or (agent-shell--get-flymake-error-context)
+      (agent-shell--get-flycheck-error-context)))
 
 (defun agent-shell--get-current-line-context ()
   "Get the current line as insertable text, ready for sending to agent."
@@ -3706,7 +3764,7 @@ The sources checked are controlled by `agent-shell-context-sources'."
                   :files (agent-shell--buffer-files :obvious t)))
          ('region (agent-shell--get-region-context
                    :deactivate t :no-error t))
-         ('error (agent-shell--get-flymake-error-context))
+         ('error (agent-shell--get-error-context))
          ('line (agent-shell--get-current-line-context))
          ((pred functionp) (funcall source))))
      agent-shell-context-sources)))
