@@ -4,10 +4,10 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Version: 0.31.4
+;; Version: 0.32.1
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.84.9") (acp "0.8.3"))
 
-(defconst agent-shell--version "0.31.4")
+(defconst agent-shell--version "0.32.1")
 
 ;; This package is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -266,6 +266,11 @@ Can be one of:
 
 (defcustom agent-shell-show-welcome-message t
   "Non-nil to show welcome message."
+  :type 'boolean
+  :group 'agent-shell)
+
+(defcustom agent-shell-show-busy-indicator t
+  "Non-nil to show the busy indicator animation in the header and mode line."
   :type 'boolean
   :group 'agent-shell)
 
@@ -4014,7 +4019,8 @@ See https://agentclientprotocol.com/protocol/session-modes for details."
 
 (defun agent-shell--status-frame ()
   "Return busy frame string or nil if not busy."
-  (when (eq 'busy (map-nested-elt (agent-shell--state) '(:heartbeat :status)))
+  (when (and agent-shell-show-busy-indicator
+             (eq 'busy (map-nested-elt (agent-shell--state) '(:heartbeat :status))))
     (let ((frames [" ░   " " ░░  " " ░░░ " " ░░░░" " ░░░ " " ░░  " " ░   " "     "]))
       (seq-elt frames (mod (map-nested-elt (agent-shell--state) '(:heartbeat :value))
                            (length frames))))))
