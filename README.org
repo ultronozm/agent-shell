@@ -487,6 +487,17 @@ All of the above settings can be applied on a per-project basis using [[https://
                   ("M-RET" . shell-maker-submit)))
   #+end_src
 
+  Or if you prefer C-c C-c to send and C-c C-k to interrupt, add the following remapping.
+
+  #+begin_src emacs-lisp :lexical no
+    (use-package agent-shell
+      :bind (:map agent-shell-mode-map
+                  ("RET" . newline)
+                  ("C-c C-c" . shell-maker-submit)
+                  ("C-c C-k" . agent-shell-interrupt)))
+  #+end_src
+
+
 *** Evil
 Evil users may want to rebind ~RET~ for inserting a new line in =insert
 mode= and sending the prompt in =normal mode=.
