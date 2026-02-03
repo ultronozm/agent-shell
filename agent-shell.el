@@ -287,6 +287,18 @@ Assume screenshot file path will be appended to this list."
   :type '(repeat string)
   :group 'agent-shell)
 
+(defcustom agent-shell-buffer-name-format 'default
+  "Format to use when generating agent shell buffer names.
+
+Each element can be:
+- Default: For example 'Claude Code Agent @ My Project'
+- Kebab case: For example 'claude-code-agent @ my-project'
+- A function: Called with agent name and project name."
+  :type '(choice (const :tag "Default" default)
+                 (const :tag "Kebab case" kebab-case)
+                 (function :tag "Custom format"))
+  :group 'agent-shell)
+
 ;;;###autoload
 (cl-defun agent-shell-make-agent-config (&key identifier
                                               mode-line-name welcome-function
@@ -1817,6 +1829,20 @@ PROPERTIES should be a plist of property-value pairs."
         (setq properties (cddr properties))))
     str))
 
+(defun agent-shell--format-buffer-name (agent-name project-name)
+  "Format `agent-shell' buffer name using AGENT-NAME and PROJECT-NAME."
+  (pcase agent-shell-buffer-name-format
+        ((pred functionp)
+         (funcall agent-shell-buffer-name-format agent-name project-name))
+        ('kebab-case
+         (format "%s-agent @ %s"
+                 (downcase (replace-regexp-in-string " " "-" agent-name))
+                 (downcase (replace-regexp-in-string " " "-" project-name))))
+        ('default
+         (format "%s Agent @ %s"
+                 agent-name
+                 project-name))))
+
 (cl-defun agent-shell--apply (&key function alist)
   "Apply keyword ALIST to FUNCTION.
 
@@ -1858,9 +1884,7 @@ variable (see makunbound)"))
                              (when agent-shell-show-welcome-message
                                (map-elt config :welcome-function))
                              new-session
-                             (concat (map-elt config :buffer-name)
-                                     " Agent @ "
-                                     (agent-shell--project-name))
+                             (agent-shell--format-buffer-name (map-elt config :buffer-name) (agent-shell--project-name))
                              (map-elt config :mode-line-name))))
     ;; While sending the first prompt request would already validate
     ;; finding the ACP agent executable, users have to wait until they
