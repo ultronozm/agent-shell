@@ -3124,14 +3124,19 @@ Returns a buffer object or nil."
       (if no-create
           (unless no-error
             (user-error "No agent shell buffers available for current project"))
-        (when (y-or-n-p "No shells in project.  Start a new one? ")
-          (get-buffer
-           (agent-shell--start :config (or (agent-shell--resolve-preferred-config)
-                                           (agent-shell-select-config
-                                            :prompt "Start new agent: ")
-                                           (error "No agent config found"))
-                               :no-focus t
-                               :new-session t)))))))
+        (if (y-or-n-p "No shells in project.  Start a new one? ")
+            (get-buffer
+             (agent-shell--start :config (or (agent-shell--resolve-preferred-config)
+                                             (agent-shell-select-config
+                                              :prompt "Start new agent: ")
+                                             (error "No agent config found"))
+                                 :no-focus t
+                                 :new-session t))
+          ;; Fall back to the first shell found (in any project)
+          (or
+           (seq-first (agent-shell-buffers))
+           (unless no-error
+             (user-error "No agent shell buffers available"))))))))
 
 (defun agent-shell--current-shell ()
   "Current shell for viewport or shell buffer."
@@ -3289,9 +3294,8 @@ When PICK-SHELL is non-nil, prompt for which shell buffer to use."
                                             (mapcar #'buffer-name (or (agent-shell-buffers)
                                                                       (user-error "No shells available")))
                                             nil t))))
-      (agent-shell--insert-to-shell-buffer
-       :shell-buffer shell-buffer
-       :text (agent-shell--get-files-context :files files)))))
+      (agent-shell-insert :text (agent-shell--get-files-context :files files)
+                          :shell-buffer shell-buffer))))
 
 (defun agent-shell-send-file-to (&optional prompt-for-file)
   "Like `agent-shell-send-file' but prompt for which shell to use.
@@ -3808,7 +3812,7 @@ Returns an alist with insertion details or nil otherwise:
       (:start . ,insert-start)
       (:end . ,insert-end))))
 
-(cl-defun agent-shell-insert (&key text submit no-focus)
+(cl-defun agent-shell-insert (&key text submit no-focus shell-buffer)
   "Insert TEXT into the agent shell at `point-max'.
 
 SUBMIT, when non-nil, submits the shell buffer after insertion.
@@ -3825,8 +3829,10 @@ Returns an alist with insertion details or nil otherwise:
    (:start . START)
    (:end . END))"
   (if agent-shell-prefer-viewport-interaction
-      (agent-shell-viewport--show-buffer :text text :submit submit :no-focus no-focus)
-    (agent-shell--insert-to-shell-buffer :text text :submit submit :no-focus no-focus)))
+      (agent-shell-viewport--show-buffer :text text :submit submit
+                                         :no-focus no-focus :shell-buffer shell-buffer)
+    (agent-shell--insert-to-shell-buffer :text text :submit submit
+                                         :no-focus no-focus :shell-buffer shell-buffer)))
 
 (cl-defun agent-shell-send-region ()
   "Send region to last accessed shell buffer in project."
