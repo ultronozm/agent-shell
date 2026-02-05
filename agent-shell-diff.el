@@ -144,12 +144,10 @@ Arguments:
                                     (select-window calling-window))))))
                         nil t))
             (setq buffer-read-only t)
-            (when bindings
-              (let ((map (make-sparse-keymap)))
-                (set-keymap-parent map diff-mode-map)
-                (dolist (binding bindings)
-                  (define-key map (kbd (map-elt binding :key)) (map-elt binding :command)))
-                (use-local-map map)))))
+            (let ((map (make-sparse-keymap)))
+              (dolist (binding bindings)
+                (define-key map (kbd (map-elt binding :key)) (map-elt binding :command)))
+              (use-local-map map))))
       (pop-to-buffer diff-buffer '((display-buffer-use-some-window
                                     display-buffer-same-window))))))
 
