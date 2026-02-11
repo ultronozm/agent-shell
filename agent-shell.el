@@ -277,6 +277,18 @@ Can be one of:
   :type 'boolean
   :group 'agent-shell)
 
+(defcustom agent-shell-busy-indicator-frames 'wide
+  "Frames for the busy indicator animation.
+Can be a symbol selecting a predefined style, or a list of frame strings.
+When providing custom frames, do not include leading spaces as padding
+is added automatically."
+  :type '(choice (const :tag "Wave (pulses up and down)" wave)
+                 (const :tag "Dots Block (circular spin)" dots-block)
+                 (const :tag "Dots Round (circular spin)" dots-round)
+                 (const :tag "Wide (horizontal blocks)" wide)
+                 (repeat :tag "Custom frames" string))
+  :group 'agent-shell)
+
 (defcustom agent-shell-screenshot-command
   (if (eq system-type 'darwin)
       '("/usr/sbin/screencapture" "-i")
@@ -2269,7 +2281,7 @@ The model contains all inputs needed to render the graphical header."
       (:font-height . ,(default-font-height))
       (:background-mode . ,(frame-parameter nil 'background-mode))
       (:context-indicator . ,(agent-shell--context-usage-indicator))
-      (:status-frame . ,(agent-shell--status-frame))
+      (:busy-indicator-frame . ,(agent-shell--busy-indicator-frame))
       (:qualifier . ,qualifier)
       (:bindings . ,bindings))))
 
@@ -2307,8 +2319,8 @@ BINDINGS is a list of alists defining key bindings to display, each with:
                               (if (map-elt header-model :context-indicator)
                                   (concat " " (map-elt header-model :context-indicator))
                                 "")
-                              (if (map-elt header-model :status-frame)
-                                  (map-elt header-model :status-frame)
+                              (if (map-elt header-model :busy-indicator-frame)
+                                  (map-elt header-model :busy-indicator-frame)
                                 ""))))
     (pcase agent-shell-header-style
       ((or 'none (pred null)) nil)
@@ -2400,12 +2412,12 @@ BINDINGS is a list of alists defining key bindings to display, each with:
                                                                       `((fill . ,color)
                                                                         (dx . "8"))
                                                                       (substring-no-properties (map-elt header-model :context-indicator))))))
-                                      (when (map-elt header-model :status-frame)
+                                      (when (map-elt header-model :busy-indicator-frame)
                                         (dom-append-child text-node
                                                           (dom-node 'tspan
                                                                     `((fill . ,(face-attribute 'default :foreground))
                                                                       (dx . "8"))
-                                                                    (map-elt header-model :status-frame))))
+                                                                    (map-elt header-model :busy-indicator-frame))))
                                       text-node))
                    ;; Bottom text line
                    (svg-text svg (string-remove-suffix "/" (abbreviate-file-name (map-elt header-model :directory)))
@@ -4355,13 +4367,19 @@ See https://agentclientprotocol.com/protocol/session-modes for details."
                              available-session-modes)))
     (map-elt mode :name)))
 
-(defun agent-shell--status-frame ()
+(defun agent-shell--busy-indicator-frame ()
   "Return busy frame string or nil if not busy."
-  (when (and agent-shell-show-busy-indicator
-             (eq 'busy (map-nested-elt (agent-shell--state) '(:heartbeat :status))))
-    (let ((frames [" ░   " " ░░  " " ░░░ " " ░░░░" " ░░░ " " ░░  " " ░   " "     "]))
-      (seq-elt frames (mod (map-nested-elt (agent-shell--state) '(:heartbeat :value))
-                           (length frames))))))
+  (when-let* ((agent-shell-show-busy-indicator)
+              ((eq 'busy (map-nested-elt (agent-shell--state) '(:heartbeat :status))))
+              (frames (pcase agent-shell-busy-indicator-frames
+                        ('wave '("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃" "▂"))
+                        ('dots-block '("⣷" "⣯" "⣟" "⡿" "⢿" "⣻" "⣽" "⣾"))
+                        ('dots-round '("⢎⡰" "⢎⡡" "⢎⡑" "⢎⠱" "⠎⡱" "⢊⡱" "⢌⡱" "⢆⡱"))
+                        ('wide '("░   " "░░  " "░░░ " "░░░░" "░░░ " "░░  " "░   " "    "))
+                        ((pred listp) agent-shell-busy-indicator-frames)
+                        (_ '("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃" "▂")))))
+    (concat " " (seq-elt frames (mod (map-nested-elt (agent-shell--state) '(:heartbeat :value))
+                                     (length frames))))))
 
 (defun agent-shell--mode-line-format ()
   "Return `agent-shell''s mode-line format.
@@ -4394,7 +4412,7 @@ Shows \" [C]\" when running in a container."
                           'help-echo (format "Session Mode: %s" mode-name)))
             (when-let ((indicator (agent-shell--context-usage-indicator)))
               (concat " " indicator))
-            (agent-shell--status-frame))))
+            (agent-shell--busy-indicator-frame))))
 
 (defun agent-shell--setup-modeline ()
   "Set up the modeline to display session mode.
