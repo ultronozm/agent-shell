@@ -902,6 +902,38 @@ Flow:
                                     :namespace-id "bootstrapping"
                                     :block-id "available_commands_update"
                                     :label-left (propertize "Available commands" 'font-lock-face 'font-lock-doc-markup-face)))
+                                 (when (and (map-nested-elt (agent-shell--state) '(:agent-config :default-model-id))
+                                            (funcall (map-nested-elt (agent-shell--state)
+                                                                     '(:agent-config :default-model-id)))
+                                            (not (map-elt (agent-shell--state) :set-model)))
+                                   ;; Setting a "Setting model" placeholder fragment before
+                                   ;; displaying the prompt (shell-maker-finish-output).
+                                   ;; This enables updating the placeholder even if the response
+                                   ;; arrives after bootstrapping prompt is displayed.
+                                   (agent-shell--update-fragment
+                                    :state (agent-shell--state)
+                                    :namespace-id "bootstrapping"
+                                    :block-id "set-model"
+                                    :label-left (propertize "Setting model" 'font-lock-face 'font-lock-doc-markup-face)
+                                    :body (format "Requesting %s..."
+                                                  (funcall (map-nested-elt (agent-shell--state)
+                                                                           '(:agent-config :default-model-id))))))
+                                 (when (and (map-nested-elt (agent-shell--state) '(:agent-config :default-session-mode-id))
+                                            (funcall (map-nested-elt (agent-shell--state)
+                                                                     '(:agent-config :default-session-mode-id)))
+                                            (not (map-elt (agent-shell--state) :set-session-mode)))
+                                   ;; Setting a "Setting session mode" placeholder fragment before
+                                   ;; displaying the prompt (shell-maker-finish-output).
+                                   ;; This enables updating the placeholder even if the response
+                                   ;; arrives after bootstrapping prompt is displayed.
+                                   (agent-shell--update-fragment
+                                    :state (agent-shell--state)
+                                    :namespace-id "bootstrapping"
+                                    :block-id "set-session-mode"
+                                    :label-left (propertize "Setting session mode" 'font-lock-face 'font-lock-doc-markup-face)
+                                    :body (format "Requesting %s..."
+                                                  (funcall (map-nested-elt (agent-shell--state)
+                                                                           '(:agent-config :default-session-mode-id))))))
                                  (shell-maker-finish-output :config shell-maker--config
                                                             :success nil))
                                (agent-shell--handle :command command :shell-buffer shell-buffer))))
@@ -2817,10 +2849,10 @@ Call ON-MODEL-CHANGED on success."
     (with-current-buffer (map-elt agent-shell--state :buffer)
       (agent-shell--update-fragment
        :state (agent-shell--state)
+       :namespace-id "bootstrapping"
        :block-id "set-model"
        :label-left (propertize "Setting model" 'font-lock-face 'font-lock-doc-markup-face)
-       :body (format "Requesting %s..." model-id)
-       :append t))
+       :body (format "Requesting %s..." model-id)))
     (acp-send-request
      :client (map-elt (agent-shell--state) :client)
      :request (acp-make-session-set-model-request
@@ -2829,6 +2861,7 @@ Call ON-MODEL-CHANGED on success."
      :on-success (lambda (_response)
                    (agent-shell--update-fragment
                     :state (agent-shell--state)
+                    :namespace-id "bootstrapping"
                     :block-id "set-model"
                     :body "\n\nDone"
                     :append t)
@@ -2848,10 +2881,10 @@ Call ON-MODE-CHANGED on success."
     (with-current-buffer (map-elt agent-shell--state :buffer)
       (agent-shell--update-fragment
        :state (agent-shell--state)
+       :namespace-id "bootstrapping"
        :block-id "set-session-mode"
        :label-left (propertize "Setting session mode" 'font-lock-face 'font-lock-doc-markup-face)
-       :body (format "Requesting %s..." mode-id)
-       :append t))
+       :body (format "Requesting %s..." mode-id)))
     (acp-send-request
      :client (map-elt (agent-shell--state) :client)
      :request (acp-make-session-set-mode-request
@@ -2860,6 +2893,7 @@ Call ON-MODE-CHANGED on success."
      :on-success (lambda (_response)
                    (agent-shell--update-fragment
                     :state (agent-shell--state)
+                    :namespace-id "bootstrapping"
                     :block-id "set-session-mode"
                     :body "\n\nDone"
                     :append t)
