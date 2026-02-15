@@ -445,6 +445,13 @@ configuration alist for backwards compatibility."
                         :key-type symbol :value-type sexp))
   :group 'agent-shell)
 
+(defcustom agent-shell-prefer-session-resume t
+  "Prefer ACP session resume over session load when both are available.
+
+When non-nil (and supported by agent), prefer ACP session resumes over loading."
+  :type 'boolean
+  :group 'agent-shell)
+
 (defcustom agent-shell-session-load-strategy 'new
   "How to choose an existing session.
 
@@ -3449,15 +3456,18 @@ Falls back to latest session in batch mode (e.g. tests)."
                                 :client (map-elt (agent-shell--state) :client)
                                 :request (let ((cwd (agent-shell--resolve-path (agent-shell-cwd)))
                                                (mcp-servers (agent-shell--mcp-servers)))
-                                           (if (map-elt (agent-shell--state) :supports-session-load)
+                                           (let ((use-resume (if agent-shell-prefer-session-resume
+                                                                  (map-elt (agent-shell--state) :supports-session-resume)
+                                                                (not (map-elt (agent-shell--state) :supports-session-load)))))
+                                             (if use-resume
+                                                 (acp-make-session-resume-request
+                                                  :session-id acp-session-id
+                                                  :cwd cwd
+                                                  :mcp-servers mcp-servers)
                                                (acp-make-session-load-request
                                                 :session-id acp-session-id
                                                 :cwd cwd
-                                                :mcp-servers mcp-servers)
-                                             (acp-make-session-resume-request
-                                              :session-id acp-session-id
-                                              :cwd cwd
-                                              :mcp-servers mcp-servers)))
+                                                :mcp-servers mcp-servers))))
                                 :buffer (current-buffer)
                                 :on-success (lambda (acp-load-response)
                                               (agent-shell--set-session-from-response
