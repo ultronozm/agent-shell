@@ -3000,6 +3000,7 @@ DATA is an optional alist of event-specific data."
   "Initialize ACP client."
   (agent-shell--update-fragment
    :state (agent-shell--state)
+   :namespace-id "bootstrapping"
    :block-id "starting"
    :label-left (format "%s %s"
                        (agent-shell--status-label "in_progress")
@@ -3023,6 +3024,7 @@ DATA is an optional alist of event-specific data."
   "Initialize ACP client subscriptions."
   (agent-shell--update-fragment
    :state agent-shell--state
+   :namespace-id "bootstrapping"
    :block-id "starting"
    :label-left (format "%s %s"
                        (agent-shell--status-label "in_progress")
@@ -3049,6 +3051,7 @@ Must provide ON-INITIATED (lambda ())."
   (with-current-buffer (map-elt agent-shell--state :buffer)
     (agent-shell--update-fragment
      :state agent-shell--state
+     :namespace-id "bootstrapping"
      :block-id "starting"
      :body "\n\nInitializing..."
      :append t))
@@ -3109,6 +3112,7 @@ Must provide ON-AUTHENTICATED (lambda ())."
   (with-current-buffer (map-elt agent-shell--state :buffer)
     (agent-shell--update-fragment
      :state (agent-shell--state)
+     :namespace-id "bootstrapping"
      :block-id "starting"
      :body "\n\nAuthenticating..."
      :append t))
@@ -3203,6 +3207,7 @@ Must provide ON-SESSION-INIT (lambda ())."
   (with-current-buffer (map-elt (agent-shell--state) :buffer)
     (agent-shell--update-fragment
      :state (agent-shell--state)
+     :namespace-id "bootstrapping"
      :block-id "starting"
      :body "\n\nCreating session..."
      :append t))
@@ -3420,6 +3425,7 @@ Falls back to latest session in batch mode (e.g. tests)."
   (with-current-buffer (map-elt (agent-shell--state) :buffer)
     (agent-shell--update-fragment
      :state (agent-shell--state)
+     :namespace-id "bootstrapping"
      :block-id "starting"
      :body "\n\nLooking for existing sessions..."
      :append t))
@@ -3449,6 +3455,7 @@ Falls back to latest session in batch mode (e.g. tests)."
                              (progn
                                (agent-shell--update-fragment
                                 :state (agent-shell--state)
+                                :namespace-id "bootstrapping"
                                 :block-id "starting"
                                 :body (format "\n\nLoading session %s..." acp-session-id)
                                 :append t)
@@ -3477,6 +3484,7 @@ Falls back to latest session in batch mode (e.g. tests)."
                                 :on-failure (lambda (_error _raw-message)
                                               (agent-shell--update-fragment
                                                :state (agent-shell--state)
+                                               :namespace-id "bootstrapping"
                                                :block-id "starting"
                                                :body "\n\nCould not load existing session. Creating a new one..."
                                                :append t)
