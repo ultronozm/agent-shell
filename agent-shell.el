@@ -57,6 +57,7 @@
 (require 'agent-shell-google)
 (require 'agent-shell-goose)
 (require 'agent-shell-heartbeat)
+(require 'agent-shell-active-message)
 (require 'agent-shell-mistral)
 (require 'agent-shell-openai)
 (require 'agent-shell-opencode)
@@ -2175,7 +2176,30 @@ variable (see makunbound)"))
         (agent-shell--handle :shell-buffer shell-buffer)))
     ;; Display buffer if no-focus was nil, respecting agent-shell-display-action
     (unless no-focus
-      (agent-shell--display-buffer shell-buffer))
+      (if (and (not agent-shell-deferred-initialization)
+               (eq agent-shell-session-load-strategy 'prompt))
+          ;; Defer display until user selects a session.
+          ;; Why? The experience is janky to display a buffer
+          ;; and soon after that prompt the user for input.
+          ;; Better to prompt the user for input and then
+          ;; display the buffer.
+          (let ((active-message (agent-shell-active-message-show :text "Loading...")))
+            (agent-shell-subscribe-to
+             :shell-buffer shell-buffer
+             :event 'session-prompt
+             :on-event (lambda (_event)
+                         (agent-shell-active-message-hide :active-message active-message)))
+            (agent-shell-subscribe-to
+             :shell-buffer shell-buffer
+             :event 'session-selected
+             :on-event (lambda (_event)
+                         (agent-shell--display-buffer shell-buffer)))
+            (agent-shell-subscribe-to
+             :shell-buffer shell-buffer
+             :event 'session-selection-cancelled
+             :on-event (lambda (_event)
+                         (kill-buffer shell-buffer))))
+        (agent-shell--display-buffer shell-buffer)))
     shell-buffer))
 
 (cl-defun agent-shell--delete-fragment (&key state block-id)
@@ -2841,6 +2865,11 @@ Initialization events (emitted in order):
   `init-session'        - ACP session created
   `init-model'          - Default model set (optional)
   `init-session-mode'   - Default session mode set (optional)
+  `session-list'        - Session list fetch initiated
+  `session-prompt'      - About to prompt user for session selection
+  `session-selected'    - Session chosen (new or existing)
+    :data contains :session-id (nil when starting new)
+  `session-selection-cancelled' - User cancelled session selection (C-g)
   `init-finished'       - Initialization pipeline completed
 
 Session events:
@@ -3133,9 +3162,11 @@ Must provide ON-SESSION-INIT (lambda ())."
       (agent-shell--initiate-session-list-and-load
        :shell-buffer shell-buffer
        :on-session-init on-session-init)
-    (agent-shell--initiate-new-session
-     :shell-buffer shell-buffer
-     :on-session-init on-session-init)))
+    (progn
+      (agent-shell--emit-event :event 'session-selected)
+      (agent-shell--initiate-new-session
+       :shell-buffer shell-buffer
+       :on-session-init on-session-init))))
 
 (defun agent-shell--format-session-date (iso-timestamp)
   "Format ISO-TIMESTAMP as a human-friendly date string.
@@ -3201,12 +3232,13 @@ Falls back to latest session in batch mode (e.g. tests)."
            ;;
            ;; Let's build something                 Today, 16:25 (nil)
            ;; Let's optimize the rocket engine      Feb 12, 21:02 (nil)
-           (this-command 'agent-shell)
-           (selection (completing-read "Resume session: "
-                                       candidates
-                                       nil t nil nil
-                                       new-session-choice)))
-      (map-elt choices selection)))))
+           (this-command 'agent-shell))
+      (agent-shell--emit-event :event 'session-prompt)
+      (let ((selection (completing-read "Resume session: "
+                                        candidates
+                                        nil t nil nil
+                                        new-session-choice)))
+        (map-elt choices selection))))))
 
 
 (cl-defun agent-shell--set-session-from-response (&key acp-response acp-session-id)
@@ -3255,6 +3287,7 @@ Falls back to latest session in batch mode (e.g. tests)."
      :body (agent-shell--format-available-modes
             (agent-shell--get-available-modes agent-shell--state))))
   (agent-shell--update-header-and-mode-line)
+  (agent-shell--emit-event :event 'init-session)
   (funcall on-session-init))
 
 (cl-defun agent-shell--initiate-new-session (&key shell-buffer on-session-init)
@@ -3320,63 +3353,68 @@ Falls back to latest session in batch mode (e.g. tests)."
      :block-id "starting"
      :body "\n\nLooking for existing sessions..."
      :append t))
+  (agent-shell--emit-event :event 'session-list)
   (acp-send-request
    :client (map-elt (agent-shell--state) :client)
    :request (acp-make-session-list-request
              :cwd (agent-shell--resolve-path (agent-shell-cwd)))
    :buffer (current-buffer)
    :on-success (lambda (acp-response)
-                 (let* ((acp-sessions (append (or (map-elt acp-response 'sessions) '()) nil))
-                        (acp-session
-                         (condition-case nil
-                             (pcase agent-shell-session-load-strategy
-                               ('new nil)
-                               ('latest (car acp-sessions))
-                               ('prompt (agent-shell--prompt-select-session acp-sessions))
-                               (_ (message "Unknown session load strategy '%s', starting a new session"
-                                           agent-shell-session-load-strategy)
-                                  nil))
-                           (quit nil)))
-                        (acp-session-id (and acp-session
-                                             (map-elt acp-session 'sessionId))))
-                   (if acp-session-id
-                       (progn
-                         (agent-shell--update-fragment
-                          :state (agent-shell--state)
-                          :block-id "starting"
-                          :body (format "\n\nLoading session %s..." acp-session-id)
-                          :append t)
-                         (acp-send-request
-                          :client (map-elt (agent-shell--state) :client)
-                          :request (let ((cwd (agent-shell--resolve-path (agent-shell-cwd)))
-                                         (mcp-servers (agent-shell--mcp-servers)))
-                                     (if (map-elt (agent-shell--state) :supports-session-load)
-                                         (acp-make-session-load-request
-                                          :session-id acp-session-id
-                                          :cwd cwd
-                                          :mcp-servers mcp-servers)
-                                       (acp-make-session-resume-request
-                                        :session-id acp-session-id
-                                        :cwd cwd
-                                        :mcp-servers mcp-servers)))
-                          :buffer (current-buffer)
-                          :on-success (lambda (acp-load-response)
-                                        (agent-shell--set-session-from-response
-                                         :acp-response acp-load-response
-                                         :acp-session-id acp-session-id)
-                                        (agent-shell--finalize-session-init :on-session-init on-session-init))
-                          :on-failure (lambda (_error _raw-message)
-                                        (agent-shell--update-fragment
-                                         :state (agent-shell--state)
-                                         :block-id "starting"
-                                         :body "\n\nCould not load existing session. Creating a new one..."
-                                         :append t)
-                                        (agent-shell--initiate-new-session
-                                         :shell-buffer shell-buffer
-                                         :on-session-init on-session-init))))
-                     (agent-shell--initiate-new-session
-                      :shell-buffer shell-buffer
-                      :on-session-init on-session-init))))
+                 (let ((acp-sessions (append (or (map-elt acp-response 'sessions) '()) nil)))
+                   (condition-case nil
+                       (let* ((acp-session
+                               (pcase agent-shell-session-load-strategy
+                                 ('new nil)
+                                 ('latest (car acp-sessions))
+                                 ('prompt (agent-shell--prompt-select-session acp-sessions))
+                                 (_ (message "Unknown session load strategy '%s', starting a new session"
+                                             agent-shell-session-load-strategy)
+                                    nil)))
+                              (acp-session-id (and acp-session
+                                                   (map-elt acp-session 'sessionId))))
+                         (agent-shell--emit-event
+                          :event 'session-selected
+                          :data (list (cons :session-id acp-session-id)))
+                         (if acp-session-id
+                             (progn
+                               (agent-shell--update-fragment
+                                :state (agent-shell--state)
+                                :block-id "starting"
+                                :body (format "\n\nLoading session %s..." acp-session-id)
+                                :append t)
+                               (acp-send-request
+                                :client (map-elt (agent-shell--state) :client)
+                                :request (let ((cwd (agent-shell--resolve-path (agent-shell-cwd)))
+                                               (mcp-servers (agent-shell--mcp-servers)))
+                                           (if (map-elt (agent-shell--state) :supports-session-load)
+                                               (acp-make-session-load-request
+                                                :session-id acp-session-id
+                                                :cwd cwd
+                                                :mcp-servers mcp-servers)
+                                             (acp-make-session-resume-request
+                                              :session-id acp-session-id
+                                              :cwd cwd
+                                              :mcp-servers mcp-servers)))
+                                :buffer (current-buffer)
+                                :on-success (lambda (acp-load-response)
+                                              (agent-shell--set-session-from-response
+                                               :acp-response acp-load-response
+                                               :acp-session-id acp-session-id)
+                                              (agent-shell--finalize-session-init :on-session-init on-session-init))
+                                :on-failure (lambda (_error _raw-message)
+                                              (agent-shell--update-fragment
+                                               :state (agent-shell--state)
+                                               :block-id "starting"
+                                               :body "\n\nCould not load existing session. Creating a new one..."
+                                               :append t)
+                                              (agent-shell--initiate-new-session
+                                               :shell-buffer shell-buffer
+                                               :on-session-init on-session-init))))
+                           (agent-shell--initiate-new-session
+                            :shell-buffer shell-buffer
+                            :on-session-init on-session-init)))
+                     (quit
+                      (agent-shell--emit-event :event 'session-selection-cancelled)))))
    :on-failure (lambda (_error _raw-message)
                  (agent-shell--initiate-new-session
                   :shell-buffer shell-buffer
