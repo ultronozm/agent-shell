@@ -2996,7 +2996,8 @@ DATA is an optional alist of event-specific data."
     (dolist (sub (map-elt (agent-shell--state) :event-subscriptions))
       (when (or (not (map-elt sub :event))
                 (eq (map-elt sub :event) event))
-        (funcall (map-elt sub :on-event) event-alist)))))
+        (with-current-buffer (map-elt (agent-shell--state) :buffer)
+          (funcall (map-elt sub :on-event) event-alist))))))
 
 ;;; Initialization
 
