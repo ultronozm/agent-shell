@@ -3480,6 +3480,14 @@ Falls back to latest session in batch mode (e.g. tests)."
                                               (agent-shell--set-session-from-response
                                                :acp-response acp-load-response
                                                :acp-session-id acp-session-id)
+                                              (agent-shell--update-fragment
+                                               :state (agent-shell--state)
+                                               :namespace-id "bootstrapping"
+                                               :block-id "resumed_session"
+                                               :label-left (format "%s %s"
+                                                                   (agent-shell--status-label "completed")
+                                                                   (propertize "Resuming session" 'font-lock-face 'font-lock-doc-markup-face))
+                                               :body (or (map-elt acp-session 'title) ""))
                                               (agent-shell--finalize-session-init :on-session-init on-session-init))
                                 :on-failure (lambda (_error _raw-message)
                                               (agent-shell--update-fragment
