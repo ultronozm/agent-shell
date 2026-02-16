@@ -4390,6 +4390,7 @@ ACTIONS as per `agent-shell--make-permission-action'."
                              :command 'diff-hunk-prev)
                        (list :key "y"
                              :description "accept all"
+                             :kind 'accept-all
                              :command (lambda ()
                                         (interactive)
                                         (let ((action (agent-shell--resolve-permission-choice-to-action
@@ -4411,6 +4412,7 @@ ACTIONS as per `agent-shell--make-permission-action'."
                                              :message-text (map-elt action :option))))))
                        (list :key (key-description (where-is-internal 'agent-shell-interrupt agent-shell-mode-map t))
                              :description nil ;; hide from header-line-format
+                             :kind 'reject-all
                              :command (lambda ()
                                         (interactive)
                                         (when (y-or-n-p "Interrupt?")

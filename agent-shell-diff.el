@@ -41,6 +41,43 @@ This variable is automatically set by :on-exit from `agent-shell-diff'
 and can be temporarily let-bound to nil to prevent the
 on-exit callback from running when the buffer is killed.")
 
+(defvar-local agent-shell-diff--accept-all-command nil
+  "Buffer-local command to accept all changes in the diff.")
+
+(defvar-local agent-shell-diff--reject-all-command nil
+  "Buffer-local command to reject all changes in the diff.")
+
+(defvar agent-shell-diff-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "y") #'agent-shell-diff-accept-all)
+    (define-key map (kbd "n") #'agent-shell-diff-reject-all)
+    map)
+  "Keymap for `agent-shell-diff-mode'.")
+
+(define-derived-mode agent-shell-diff-mode diff-mode "Agent-Shell-Diff"
+  "Major mode for agent-shell diff buffers.
+Derives from `diff-mode'.  Provides `agent-shell-diff-accept-all'
+and `agent-shell-diff-reject-all' commands that can be rebound
+via `agent-shell-diff-mode-map'."
+  :group 'agent-shell
+  ;; Don't inherit diff-mode-map (some bindings can be destructive).
+  (set-keymap-parent agent-shell-diff-mode-map nil)
+  (setq buffer-read-only t))
+
+(defun agent-shell-diff-accept-all ()
+  "Accept all changes in the current diff buffer."
+  (interactive)
+  (if agent-shell-diff--accept-all-command
+      (funcall agent-shell-diff--accept-all-command)
+    (user-error "No accept command available in this buffer")))
+
+(defun agent-shell-diff-reject-all ()
+  "Reject all changes in the current diff buffer."
+  (interactive)
+  (if agent-shell-diff--reject-all-command
+      (funcall agent-shell-diff--reject-all-command)
+    (user-error "No reject command available in this buffer")))
+
 (cl-defun agent-shell-diff (&key old new on-exit title bindings file)
   "Display a diff between OLD and NEW strings in a buffer.
 
@@ -103,6 +140,7 @@ Arguments:
                     (overlay-put overlay 'display
                                  (propertize "│ changes │\n╰─────────╯\n\n" 'face face))
                     (overlay-put overlay 'evaporate t)))))
+            (agent-shell-diff-mode)
             (when bindings
               (setq header-line-format
                     (concat
@@ -143,10 +181,19 @@ Arguments:
                                     (set-window-buffer calling-window calling-buffer)
                                     (select-window calling-window))))))
                         nil t))
-            (setq buffer-read-only t)
-            (let ((map (make-sparse-keymap)))
+            (let ((map (copy-keymap agent-shell-diff-mode-map)))
               (dolist (binding bindings)
-                (define-key map (kbd (map-elt binding :key)) (map-elt binding :command)))
+                (cond
+                 ((equal (map-elt binding :kind) 'accept-all)
+                  (setq agent-shell-diff--accept-all-command (map-elt binding :command))
+                  (unless (where-is-internal #'agent-shell-diff-accept-all map)
+                    (define-key map (kbd (map-elt binding :key)) (map-elt binding :command))))
+                 ((equal (map-elt binding :kind) 'reject-all)
+                  (setq agent-shell-diff--reject-all-command (map-elt binding :command))
+                  (unless (where-is-internal #'agent-shell-diff-reject-all map)
+                    (define-key map (kbd (map-elt binding :key)) (map-elt binding :command))))
+                 (t
+                  (define-key map (kbd (map-elt binding :key)) (map-elt binding :command)))))
               (use-local-map map))))
       (pop-to-buffer diff-buffer '((display-buffer-use-some-window
                                     display-buffer-same-window))))))
