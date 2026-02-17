@@ -1090,6 +1090,7 @@ COMMAND may be a shell command string or an argv vector."
   (cond ((stringp command) command)
         ((vectorp command)
          (combine-and-quote-strings (append command nil)))
+        ((not command) "nil")
         (t (error "Unexpected tool-call command type: %S" (type-of command)))))
 
 (cl-defun agent-shell--on-notification (&key state notification)
