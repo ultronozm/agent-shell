@@ -554,12 +554,13 @@ always go to Evil modes if you need to with ~C-z~).
 |-----------------------------------------------+---------------------------------------------------------------------------------|
 | agent-shell-agent-configs                     | The list of known agent configurations.                                         |
 | agent-shell-anthropic-authentication          | Configuration for Anthropic authentication.                                     |
+| agent-shell-anthropic-claude-acp-command      | Command and parameters for the Anthropic Claude client.                         |
 | agent-shell-anthropic-claude-command          | Command and parameters for the Anthropic Claude client.                         |
 | agent-shell-anthropic-claude-environment      | Environment variables for the Anthropic Claude client.                          |
 | agent-shell-anthropic-default-model-id        | Default Anthropic model ID.                                                     |
 | agent-shell-anthropic-default-session-mode-id | Default Anthropic session mode ID.                                              |
+| agent-shell-auggie-acp-command                | Command and parameters for the Auggie client.                                   |
 | agent-shell-auggie-authentication             | Configuration for Auggie authentication.                                        |
-| agent-shell-auggie-command                    | Command and parameters for the Auggie client.                                   |
 | agent-shell-auggie-environment                | Environment variables for the Auggie client.                                    |
 | agent-shell-buffer-name-format                | Format to use when generating agent shell buffer names.                         |
 | agent-shell-busy-indicator-frames             | Frames for the busy indicator animation.                                        |
@@ -567,52 +568,51 @@ always go to Evil modes if you need to with ~C-z~).
 | agent-shell-completion-mode-hook              | Hook run after entering or leaving ‘agent-shell-completion-mode’.               |
 | agent-shell-container-command-runner          | Command prefix for executing commands in a container.                           |
 | agent-shell-context-sources                   | Sources to consider when determining M-x agent-shell automatic context.         |
-| agent-shell-cursor-command                    | Command and parameters for the Cursor agent client.                             |
+| agent-shell-cursor-acp-command                | Command and parameters for the Cursor agent client.                             |
 | agent-shell-cursor-environment                | Environment variables for the Cursor agent client.                              |
 | agent-shell-display-action                    | Display action for agent shell buffers.                                         |
+| agent-shell-droid-acp-command                 | Command and parameters for the Factory Droid ACP client.                        |
 | agent-shell-droid-authentication              | Configuration for Factory Droid authentication.                                 |
-| agent-shell-droid-command                     | Command and parameters for the Factory Droid ACP client.                        |
 | agent-shell-droid-environment                 | Environment variables for the Factory Droid ACP client.                         |
 | agent-shell-embed-file-size-limit             | Maximum file size in bytes for embedding with ContentBlock::Resource.           |
 | agent-shell-file-completion-enabled           | Non-nil automatically enables file completion when starting shells.             |
-| agent-shell-github-command                    | Command and parameters for the GitHub Copilot agent client.                     |
+| agent-shell-github-acp-command                | Command and parameters for the GitHub Copilot agent client.                     |
 | agent-shell-github-default-model-id           | Default GitHub Copilot model ID.                                                |
 | agent-shell-github-default-session-mode-id    | Default GitHub Copilot session mode ID.                                         |
 | agent-shell-github-environment                | Environment variables for the GitHub Copilot agent client.                      |
 | agent-shell-google-authentication             | Configuration for Google authentication.                                        |
-| agent-shell-google-gemini-command             | Command and parameters for the Gemini client.                                   |
+| agent-shell-google-gemini-acp-command         | Command and parameters for the Gemini client.                                   |
 | agent-shell-google-gemini-environment         | Environment variables for the Google Gemini client.                             |
+| agent-shell-goose-acp-command                 | Command and parameters for the Goose client.                                    |
 | agent-shell-goose-authentication              | Configuration for Goose authentication.                                         |
-| agent-shell-goose-command                     | Command and parameters for the Goose client.                                    |
 | agent-shell-goose-environment                 | Environment variables for the Goose client.                                     |
 | agent-shell-header-style                      | Style for agent shell buffer headers.                                           |
 | agent-shell-highlight-blocks                  | Whether or not to highlight source blocks.                                      |
 | agent-shell-mcp-servers                       | List of MCP servers to initialize when creating a new session.                  |
+| agent-shell-mistral-acp-command               | Command and parameters for the Mistral Vibe client.                             |
 | agent-shell-mistral-authentication            | Configuration for Mistral AI authentication.                                    |
-| agent-shell-mistral-command                   | Command and parameters for the Mistral Vibe client.                             |
 | agent-shell-mistral-default-model-id          | Default Mistral AI model ID.                                                    |
 | agent-shell-mistral-default-session-mode-id   | Default Mistral AI session mode ID.                                             |
 | agent-shell-mistral-environment               | Environment variables for the Mistral Vibe client.                              |
 | agent-shell-openai-authentication             | Configuration for OpenAI authentication.                                        |
-| agent-shell-openai-codex-command              | Command and parameters for the OpenAI Codex client.                             |
+| agent-shell-openai-codex-acp-command          | Command and parameters for the OpenAI Codex client.                             |
 | agent-shell-openai-codex-environment          | Environment variables for the OpenAI Codex client.                              |
+| agent-shell-opencode-acp-command              | Command and parameters for the OpenCode client.                                 |
 | agent-shell-opencode-authentication           | Configuration for OpenCode authentication.                                      |
-| agent-shell-opencode-command                  | Command and parameters for the OpenCode client.                                 |
 | agent-shell-opencode-default-model-id         | Default OpenCode model ID.                                                      |
 | agent-shell-opencode-default-session-mode-id  | Default OpenCode session mode ID.                                               |
 | agent-shell-opencode-environment              | Environment variables for the OpenCode client.                                  |
 | agent-shell-path-resolver-function            | Function for resolving remote paths on the local file-system, and vice versa.   |
 | agent-shell-permission-icon                   | Icon displayed when shell commands require permission to execute.               |
-| agent-shell-pi-command                        | Command and parameters for the Pi ACP client.                                   |
+| agent-shell-pi-acp-command                    | Command and parameters for the Pi ACP client.                                   |
 | agent-shell-pi-environment                    | Environment variables for the Pi client.                                        |
 | agent-shell-prefer-session-resume             | Prefer ACP session resume over session load when both are available.            |
 | agent-shell-prefer-viewport-interaction       | Non-nil makes ‘agent-shell’ prefer viewport interaction over shell interaction. |
 | agent-shell-preferred-agent-config            | Default agent to use for all new shells.                                        |
+| agent-shell-qwen-acp-command                  | Command and parameters for the Qwen Code client.                                |
 | agent-shell-qwen-authentication               | Configuration for Qwen Code authentication.                                     |
-| agent-shell-qwen-command                      | Command and parameters for the Qwen Code client.                                |
 | agent-shell-qwen-environment                  | Environment variables for the Qwen Code client.                                 |
 | agent-shell-screenshot-command                | The program to use for capturing screenshots.                                   |
-| agent-shell-session-load-strategy             | How to choose existing sessions when session/list and session/load are available. |
 | agent-shell-section-functions                 | Abnormal hook run after overlays are applied (experimental).                    |
 | agent-shell-session-strategy                  | How to handle sessions when starting a new shell.                               |
 | agent-shell-show-busy-indicator               | Non-nil to show the busy indicator animation in the header and mode line.       |

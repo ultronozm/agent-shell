@@ -36,7 +36,7 @@
 (declare-function agent-shell--make-acp-client "agent-shell")
 (declare-function agent-shell--dwim "agent-shell")
 
-(defcustom agent-shell-github-command
+(defcustom agent-shell-github-acp-command
   '("copilot" "--acp")
   "Command and parameters for the GitHub Copilot agent client.
 
@@ -99,8 +99,10 @@ Returns an agent configuration alist using `agent-shell-make-agent-config'."
   "Create a GitHub Copilot agent ACP client with BUFFER as context."
   (unless buffer
     (error "Missing required argument: :buffer"))
-  (agent-shell--make-acp-client :command (car agent-shell-github-command)
-                                :command-params (cdr agent-shell-github-command)
+  (when (and (boundp 'agent-shell-github-command) agent-shell-github-command)
+    (user-error "Please migrate to use agent-shell-github-acp-command and eval (setq agent-shell-github-command nil)"))
+  (agent-shell--make-acp-client :command (car agent-shell-github-acp-command)
+                                :command-params (cdr agent-shell-github-acp-command)
                                 :environment-variables agent-shell-github-environment
                                 :context-buffer buffer))
 

@@ -89,7 +89,7 @@ when starting a new shell."
   :type '(choice (const nil) string)
   :group 'agent-shell)
 
-(defcustom agent-shell-anthropic-claude-command
+(defcustom agent-shell-anthropic-claude-acp-command
   '("claude-agent-acp")
   "Command and parameters for the Anthropic Claude client.
 
@@ -147,6 +147,8 @@ additional environment variables."
     (error "Missing required argument: :buffer"))
   (when (and (boundp 'agent-shell-anthropic-key) agent-shell-anthropic-key)
     (user-error "Please migrate to use agent-shell-anthropic-authentication and eval (setq agent-shell-anthropic-key nil)"))
+  (when (and (boundp 'agent-shell-anthropic-claude-command) agent-shell-anthropic-claude-command)
+    (user-error "Please migrate to use agent-shell-anthropic-claude-acp-command and eval (setq agent-shell-anthropic-claude-command nil)"))
   (let ((env-vars-overrides (cond
                              ((map-elt agent-shell-anthropic-authentication :api-key)
                               (list (format "ANTHROPIC_API_KEY=%s"
@@ -155,8 +157,8 @@ additional environment variables."
                               (list "ANTHROPIC_API_KEY="))
                              (t
                               (error "Invalid authentication configuration")))))
-    (agent-shell--make-acp-client :command (car agent-shell-anthropic-claude-command)
-                                  :command-params (cdr agent-shell-anthropic-claude-command)
+    (agent-shell--make-acp-client :command (car agent-shell-anthropic-claude-acp-command)
+                                  :command-params (cdr agent-shell-anthropic-claude-acp-command)
                                   :environment-variables (append env-vars-overrides
                                                                  agent-shell-anthropic-claude-environment)
                                   :context-buffer buffer)))
