@@ -79,5 +79,26 @@
         (when (buffer-live-p test-buffer)
           (kill-buffer test-buffer))))))
 
+(ert-deftest agent-shell-anthropic-default-model-id-function-test ()
+  "Test that agent-shell-anthropic-default-model-id accepts a function."
+  (let* ((config (agent-shell-anthropic-make-claude-code-config))
+         (default-model-id-fn (map-elt config :default-model-id)))
+
+    ;; Test with nil value
+    (let ((agent-shell-anthropic-default-model-id nil))
+      (should (null (funcall default-model-id-fn))))
+
+    ;; Test with string value
+    (let ((agent-shell-anthropic-default-model-id "claude-opus-4-6"))
+      (should (string= (funcall default-model-id-fn) "claude-opus-4-6")))
+
+    ;; Test with function value
+    (let ((agent-shell-anthropic-default-model-id (lambda () "dynamic-model-id")))
+      (should (string= (funcall default-model-id-fn) "dynamic-model-id")))
+
+    ;; Test with function that returns nil
+    (let ((agent-shell-anthropic-default-model-id (lambda () nil)))
+      (should (null (funcall default-model-id-fn))))))
+
 (provide 'agent-shell-anthropic-tests)
 ;;; agent-shell-anthropic-tests.el ends here
